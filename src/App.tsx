@@ -43,25 +43,31 @@ const App: React.FC = () => {
             const imageData = canvas.toDataURL('image/jpeg');
 
             try {
-                // Send to Netlify Function (Mocked for now)
-                // const response = await fetch('/.netlify/functions/detect', {
-                //   method: 'POST',
-                //   body: JSON.stringify({ image: imageData })
-                // });
-                // const data = await response.json();
+                // Send to Netlify Function
+                const response = await fetch('/.netlify/functions/detect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
 
-                // Simulation for presentation:
-                setTimeout(() => {
-                    setLastResult({
-                        items: [
-                            { label: 'Cup', temp: 42.5, x: 100, y: 150, w: 200, h: 300 }
-                        ]
-                    });
-                    setStatus('idle');
-                    setIsScanning(true);
-                }, 1500);
+                if (!response.ok) throw new Error('API Error');
+
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error("AI Error:", data.error);
+                    setStatus('error');
+                    return;
+                }
+
+                setLastResult({
+                    items: data.items || []
+                });
+                setStatus('idle');
+                setIsScanning(true);
 
             } catch (err) {
+                console.error("Fetch Error:", err);
                 setStatus('error');
             }
         }
@@ -109,10 +115,10 @@ const App: React.FC = () => {
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0 }}
                                 style={{
-                                    left: `${(item.x / 640) * 100}%`,
-                                    top: `${(item.y / 853) * 100}%`,
-                                    width: `${(item.w / 640) * 100}%`,
-                                    height: `${(item.h / 853) * 100}%`,
+                                    left: `${(item.x / 1000) * 100}%`,
+                                    top: `${(item.y / 1000) * 100}%`,
+                                    width: `${(item.w / 1000) * 100}%`,
+                                    height: `${(item.h / 1000) * 100}%`,
                                 }}
                                 className={`absolute border-2 ${item.temp > 40 ? 'border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'border-blue-500'} rounded-lg transition-colors duration-500`}
                             >
@@ -141,8 +147,8 @@ const App: React.FC = () => {
                     onClick={handleScan}
                     disabled={status === 'processing'}
                     className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-lg transition-all active:scale-95 ${status === 'processing'
-                            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                            : 'bg-red-600 hover:bg-red-500 text-white shadow-xl shadow-red-600/30'
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-500 text-white shadow-xl shadow-red-600/30'
                         }`}
                 >
                     {status === 'processing' ? '分析中...' : <><Camera size={24} /> スキャン開始</>}

@@ -32,8 +32,6 @@ def handler(event, context):
             }
 
         # Z.ai (Zhipu AI) GLM-4V API Call
-        # API URL: https://open.bigmodel.cn/api/paas/v4/chat/completions
-        
         payload = {
             "model": "glm-4v",
             "messages": [
@@ -42,7 +40,7 @@ def handler(event, context):
                     "content": [
                         {
                             "type": "text",
-                            "text": "Find all cups in this image and return their coordinates as [x, y, width, height] in JSON format. Also, if there is thermal data available, identify high temperature areas. (Simulated: assume 42C if steam is visible)"
+                            "text": "Identify all cups in this image. For each cup, provide its bounding box coordinates [x, y, width, height] normalized to a 1000x1000 scale. Also, if there is steam or visual evidence of heat, estimate the temperature (e.g., 45.0 for hot, 20.0 for cold). Return ONLY a valid JSON list in this format: [{\"label\": \"cup\", \"x\": 123, \"y\": 456, \"w\": 100, \"h\": 200, \"temp\": 42.5}]. NO extra text."
                         },
                         {
                             "type": "image_url",
@@ -53,7 +51,8 @@ def handler(event, context):
                     ]
                 }
             ],
-            "max_tokens": 500
+            "max_tokens": 1000,
+            "temperature": 0.1
         }
 
         headers = {
@@ -61,30 +60,41 @@ def handler(event, context):
             "Authorization": f"Bearer {zai_api_key}"
         }
 
-        # For this demo, we use a mocked response if API fails or for testing
-        # response = requests.post("https://open.bigmodel.cn/api/paas/v4/chat/completions", headers=headers, json=payload)
-        # response_data = response.json()
+        response = requests.post("https://open.bigmodel.cn/api/paas/v4/chat/completions", headers=headers, json=payload, timeout=30)
         
-        # Simulated thermal sensing logic (placeholder for the requested library)
-        # In a real scenario, you'd use something like:
-        # from amg8833 import AMG8833
-        # sensor = AMG8833()
-        # temp_data = sensor.read_temp()
+        if response.status_code != 200:
+            return {
+                'statusCode': response.status_code,
+                'body': json.dumps({'error': f'Z.ai API Error: {response.text}'})
+            }
+
+        response_data = response.json()
+        content = response_data['choices'][0]['message']['content']
         
+        # Extract JSON from potential Markdown formatting
+        try:
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            items = json.loads(content)
+        except Exception as e:
+            # Fallback parsing if LLM output is slightly malformed
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'items': [],
+                    'debug_raw': content,
+                    'error': 'Failed to parse AI response'
+                })
+            }
+
         return {
             'statusCode': 200,
             'body': json.dumps({
-                'items': [
-                    {
-                        'label': 'Cup',
-                        'temp': 42.5,
-                        'x': 100,
-                        'y': 150,
-                        'w': 200,
-                        'h': 300
-                    }
-                ],
-                'message': 'Success (Mocked for Demo)'
+                'items': items,
+                'message': 'Detection successful'
             })
         }
 
